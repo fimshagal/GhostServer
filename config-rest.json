@@ -1,6 +1,5 @@
 {
   "mode": "rest",
-  "host": "127.0.0.1",
   "port": 8080,
   "cors": true,
   "routes": [
@@ -19,8 +18,8 @@
       },
       "body": {
         "users": [
-          { "id": 1, "name": "Alice" },
-          { "id": 2, "name": "Bob" }
+          { "id": 1, "name": "!{RANDOM_STRING} Alice Alla" },
+          { "id": 2, "name": "!{RANDOM_STRING} Bob Nob Rob" }
         ]
       }
     },

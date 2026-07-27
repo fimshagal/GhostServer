@@ -37,12 +37,14 @@ zig build test
 
 ## Host (bind)
 
-Bind only works for an IP that exists on a local network interface:
+`host` is **optional** (default `127.0.0.1`). You usually do not need it in the config.
 
-- `127.0.0.1` — local only
-- `0.0.0.0` — all interfaces (clients use the machine’s LAN IP)
-- `171.0.0.1` — **no**, unless that address is assigned to an adapter
+| Value | Meaning |
+|-------|---------|
+| `127.0.0.1` (default) | local only — browser/apps on this PC |
+| `0.0.0.0` | all interfaces — phone/other PC can use your LAN IP (e.g. `http://192.168.0.50:8080`) |
 
+Do not put a random public IP here. Bind address ≠ “my Wi‑Fi IP”. For LAN access set `"host": "0.0.0.0"`, then connect to the machine’s real LAN address.
 ## Configs
 
 ### REST — `config-rest.json`
@@ -50,7 +52,7 @@ Bind only works for an IP that exists on a local network interface:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | `rest` | must be `rest` |
-| `host` | string | `127.0.0.1` | bind address |
+| `host` | string | `127.0.0.1` | optional bind address (`0.0.0.0` for LAN) |
 | `port` | number | `8080` | port |
 | `cors` | bool | `true` | CORS + auto OPTIONS |
 | `routes` | array | `[]` | REST endpoints |
@@ -62,7 +64,7 @@ Route fields: `method`, `path`, `status`, `delay_ms`, `headers`, `body`.
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `mode` | string | — | `ws` |
-| `host` | string | `127.0.0.1` | bind address |
+| `host` | string | `127.0.0.1` | optional bind address (`0.0.0.0` for LAN) |
 | `port` | number | `8081` | port |
 | `path` | string | `/ws` | upgrade path |
 | `interval_ms` | number | `1000` | message spam interval |
@@ -73,7 +75,6 @@ WS example:
 ```json
 {
   "mode": "ws",
-  "host": "127.0.0.1",
   "port": 8081,
   "path": "/ws",
   "interval_ms": 1000,
@@ -86,6 +87,7 @@ WS example:
 }
 ```
 
+To allow LAN clients, add `"host": "0.0.0.0"`.
 ## Actions (`!{...}`)
 
 A string value that starts with `!{ACTION_NAME}` is evaluated on **every** REST request / WS message.
