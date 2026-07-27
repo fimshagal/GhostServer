@@ -23,6 +23,7 @@ pub const builtins = [_]Action{
     .{ .name = "RANDOM_STRING", .run = randomString },
     .{ .name = "TIMESTAMP_MS", .run = timestampMs },
     .{ .name = "TIMESTAMP_ISO", .run = timestampIso },
+    .{ .name = "UUID", .run = uuid },
 };
 
 pub const Parsed = struct {
@@ -167,6 +168,47 @@ fn timestampIso(ctx: Context, args: []const u8) !json.Value {
         },
     );
     return .{ .string = formatted };
+}
+
+fn uuid(ctx: Context, args: []const u8) !json.Value {
+    try requireNoArgs(args);
+    var bytes: [16]u8 = undefined;
+    ctx.random.bytes(&bytes);
+    // UUID version 4 + RFC 4122 variant bits (looks like a real UUID).
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+    const formatted = try std.fmt.allocPrint(
+        ctx.allocator,
+        "{x:0>2}{x:0>2}{x:0>2}{x:0>2}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}-{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}{x:0>2}",
+        .{
+            bytes[0],  bytes[1],  bytes[2],  bytes[3],
+            bytes[4],  bytes[5],  bytes[6],  bytes[7],
+            bytes[8],  bytes[9],  bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15],
+        },
+    );
+    return .{ .string = formatted };
+}
+
+test "uuid has expected shape" {
+    var prng = std.Random.DefaultPrng.init(123);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+    };
+
+    const value = try uuid(ctx, "");
+    try std.testing.expect(value == .string);
+    try std.testing.expectEqual(@as(usize, 36), value.string.len);
+    try std.testing.expectEqual(@as(u8, '-'), value.string[8]);
+    try std.testing.expectEqual(@as(u8, '-'), value.string[13]);
+    try std.testing.expectEqual(@as(u8, '4'), value.string[14]);
+    try std.testing.expectEqual(@as(u8, '-'), value.string[18]);
+    try std.testing.expectEqual(@as(u8, '-'), value.string[23]);
 }
 
 test "random string picks from options" {

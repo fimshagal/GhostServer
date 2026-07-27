@@ -29,7 +29,7 @@
       "path": "/api/users/:id",
       "status": 200,
       "body": {
-        "id": "![[RANDOM_INT_IN_RANGE]] 1 1000",
+        "id": "![[UUID]]",
         "score": "![[RANDOM_FLOAT_IN_RANGE]] 0.0 100.0",
         "active": "![[RANDOM_BOOL]]",
         "name": "![[RANDOM_STRING]] Alpha Beta Gama"

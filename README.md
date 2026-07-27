@@ -1,35 +1,35 @@
 # GhostServer
 
-Локальний mock-сервер на Zig: **REST** і **WebSocket**. Читає JSON-конфіги й віддає заготовлені відповіді з `![[ACTION]]` препроцесингом.
+A local Zig mock server for **REST** and **WebSocket**. It reads JSON configs and returns prepared responses with `![[ACTION]]` preprocessing.
 
-Потрібен **Zig 0.16+**.
+Requires **Zig 0.16+**.
 
-## Збірка і запуск
+## Build and run
 
 ```bash
 zig build
 zig build run
 ```
 
-`zig build run` за замовчуванням піднімає обидва сервіси з `config-rest.json` + `config-ws.json`.
+`zig build run` starts both services by default using `config-rest.json` + `config-ws.json`.
 
-Явно:
+Explicitly:
 
 ```bash
 .\zig-out\bin\GhostServer.exe --rest config-rest.json --ws config-ws.json
 zig build run -- --rest config-rest.json --ws config-ws.json
 ```
 
-Лише один режим:
+Single mode only:
 
 ```bash
 .\zig-out\bin\GhostServer.exe --rest config-rest.json
 .\zig-out\bin\GhostServer.exe --ws config-ws.json
 ```
 
-Без аргументів exe шукає `config-rest.json` / `config-ws.json` поруч із собою, потім у cwd.
+With no arguments, the exe looks for `config-rest.json` / `config-ws.json` next to itself, then in the current working directory.
 
-Якщо бачиш `AddressInUse` / exit code 255 — уже крутиться інший GhostServer на 8080/8081. Зупини його і запусти знову.
+If you see `AddressInUse` / exit code 255, another GhostServer is already running on 8080/8081. Stop it and start again.
 
 ```bash
 zig build test
@@ -37,38 +37,38 @@ zig build test
 
 ## Host (bind)
 
-Bind працює лише на IP інтерфейсу машини:
+Bind only works for an IP that exists on a local network interface:
 
-- `127.0.0.1` — локально
-- `0.0.0.0` — усі інтерфейси (клієнт ходить на LAN IP ПК)
-- `171.0.0.1` — **ні**, якщо адресу не додано на адаптер
+- `127.0.0.1` — local only
+- `0.0.0.0` — all interfaces (clients use the machine’s LAN IP)
+- `171.0.0.1` — **no**, unless that address is assigned to an adapter
 
-## Конфіги
+## Configs
 
 ### REST — `config-rest.json`
 
-| Поле | Тип | Default | Опис |
-|------|-----|---------|------|
-| `mode` | string | `rest` | має бути `rest` |
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `mode` | string | `rest` | must be `rest` |
 | `host` | string | `127.0.0.1` | bind address |
-| `port` | number | `8080` | порт |
+| `port` | number | `8080` | port |
 | `cors` | bool | `true` | CORS + auto OPTIONS |
-| `routes` | array | `[]` | REST ендпоінти |
+| `routes` | array | `[]` | REST endpoints |
 
-Route: `method`, `path`, `status`, `delay_ms`, `headers`, `body`.
+Route fields: `method`, `path`, `status`, `delay_ms`, `headers`, `body`.
 
 ### WebSocket — `config-ws.json`
 
-| Поле | Тип | Default | Опис |
-|------|-----|---------|------|
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
 | `mode` | string | — | `ws` |
 | `host` | string | `127.0.0.1` | bind address |
-| `port` | number | `8081` | порт |
-| `path` | string | `/ws` | шлях upgrade |
-| `interval_ms` | number | `1000` | інтервал спаму повідомлень |
-| `message` | any | — | шаблон повідомлення (з екшенами) |
+| `port` | number | `8081` | port |
+| `path` | string | `/ws` | upgrade path |
+| `interval_ms` | number | `1000` | message spam interval |
+| `message` | any | — | message template (with actions) |
 
-Приклад WS:
+WS example:
 
 ```json
 {
@@ -88,24 +88,25 @@ Route: `method`, `path`, `status`, `delay_ms`, `headers`, `body`.
 
 ## Actions (`![[...]]`)
 
-Рядкове значення, що починається з `![[ACTION_NAME]]`, обчислюється **на кожен** REST-запит / WS-повідомлення.
+A string value that starts with `![[ACTION_NAME]]` is evaluated on **every** REST request / WS message.
 
-| Action | Аргументи | Результат |
-|--------|-----------|-----------|
-| `RANDOM_INT_IN_RANGE` | `min max` | випадкове ціле (включно) |
-| `RANDOM_FLOAT_IN_RANGE` | `min max` | випадковий float у `[min, max)` |
+| Action | Arguments | Result |
+|--------|-----------|--------|
+| `RANDOM_INT_IN_RANGE` | `min max` | random integer (inclusive) |
+| `RANDOM_FLOAT_IN_RANGE` | `min max` | random float in `[min, max)` |
 | `RANDOM_BOOL` | — | `true` / `false` |
-| `RANDOM_STRING` | `Word1 Word2 ...` | один випадковий токен |
-| `TIMESTAMP_MS` | — | unix time у мілісекундах |
+| `RANDOM_STRING` | `Word1 Word2 ...` | one random token |
+| `TIMESTAMP_MS` | — | unix time in milliseconds |
 | `TIMESTAMP_ISO` | — | `YYYY-MM-DDTHH:MM:SSZ` |
+| `UUID` | — | random UUID v4 string |
 
-Нові екшени — у `src/actions.zig` (`builtins`).
+Add new actions in `src/actions.zig` (`builtins`).
 
-## Тест з консолі
+## Console testing
 
 ### REST
 
-У PowerShell використовуйте `curl.exe`:
+In PowerShell use `curl.exe`:
 
 ```powershell
 curl.exe http://127.0.0.1:8080/api/health
@@ -115,22 +116,22 @@ curl.exe -X POST http://127.0.0.1:8080/api/login
 
 ### WebSocket
 
-Нативного зручного клієнта в PowerShell немає:
+PowerShell has no convenient built-in client:
 
 ```powershell
-# websocat (якщо встановлений):
+# websocat (if installed):
 websocat ws://127.0.0.1:8081/ws
 
 # WebSocket (Node 22+)
 node -e "const ws=new WebSocket('ws://127.0.0.1:8081/ws'); ws.onmessage=e=>console.log(e.data)"
 
-# або через npx:
+# or via npx:
 npx --yes wscat -c ws://127.0.0.1:8081/ws
 ```
 
-Сервер раз на `interval_ms` шле JSON з timestamp і payload.
+Every `interval_ms` the server sends JSON with a timestamp and payload.
 
-## З веб-проєкту
+## From a web project
 
 ```js
 // REST
@@ -142,13 +143,13 @@ const ws = new WebSocket("ws://127.0.0.1:8081/ws");
 ws.onmessage = (e) => console.log(JSON.parse(e.data));
 ```
 
-## Структура
+## Layout
 
 ```
 config-rest.json   # REST mock
 config-ws.json     # WebSocket spam
 src/main.zig       # CLI --rest / --ws
-src/config.zig     # парсинг конфігів
+src/config.zig     # config parsing
 src/actions.zig    # ![[ACTION]]
 src/server.zig     # REST + WS listeners
 ```
