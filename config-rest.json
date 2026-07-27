@@ -29,17 +29,27 @@
       "path": "/api/users/:id",
       "status": 200,
       "body": {
-        "id": "![[UUID]]",
-        "score": "![[RANDOM_FLOAT_IN_RANGE]] 0.0 100.0",
-        "active": "![[RANDOM_BOOL]]",
-        "name": "![[RANDOM_STRING]] Alpha Beta Gama"
+        "id": "!{UUID}",
+        "score": "!{RANDOM_FLOAT_IN_RANGE} 0.0 100.0",
+        "active": "!{RANDOM_BOOL}",
+        "name": "!{RANDOM_STRING} Alpha Beta Gama"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/spinMachine",
+      "status": 200,
+      "delay_ms": 100,
+      "body": {
+        "spinId": "!{UUID}",
+        "reels": "!{RANDOM_INT_MATRIX} 5 3 0 7"
       }
     },
     {
       "method": "GET",
       "path": "/api/roll",
       "body": {
-        "dice": "![[RANDOM_INT_IN_RANGE]] 1 6"
+        "dice": "!{RANDOM_INT_IN_RANGE} 1 6"
       }
     },
     {

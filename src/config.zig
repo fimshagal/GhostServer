@@ -172,7 +172,7 @@ fn uppercaseOwned(allocator: std.mem.Allocator, text: []const u8) ![]u8 {
     return out;
 }
 
-/// Resolve `![[ACTION]]` markers and render bytes.
+/// Resolve `!{ACTION}` markers and render bytes.
 pub fn renderTemplate(
     allocator: std.mem.Allocator,
     template: ?json.Value,
@@ -295,7 +295,7 @@ test "parse ws config" {
         \\  "port": 8081,
         \\  "path": "/ws",
         \\  "interval_ms": 500,
-        \\  "message": { "ts": "![[TIMESTAMP_MS]]" }
+        \\  "message": { "ts": "!{TIMESTAMP_MS}" }
         \\}
     ;
     var config = try parse(std.testing.allocator, src);
@@ -314,7 +314,7 @@ test "renderBody expands actions" {
         \\  "routes": [
         \\    {
         \\      "path": "/api/roll",
-        \\      "body": { "id": "![[RANDOM_INT_IN_RANGE]] 5 5", "flag": "![[RANDOM_BOOL]]" }
+        \\      "body": { "id": "!{RANDOM_INT_IN_RANGE} 5 5", "flag": "!{RANDOM_BOOL}" }
         \\    }
         \\  ]
         \\}

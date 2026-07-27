@@ -1,6 +1,6 @@
 # GhostServer
 
-A local Zig mock server for **REST** and **WebSocket**. It reads JSON configs and returns prepared responses with `![[ACTION]]` preprocessing.
+A local Zig mock server for **REST** and **WebSocket**. It reads JSON configs and returns prepared responses with `!{ACTION}` preprocessing.
 
 Requires **Zig 0.16+**.
 
@@ -78,22 +78,24 @@ WS example:
   "path": "/ws",
   "interval_ms": 1000,
   "message": {
-    "ts": "![[TIMESTAMP_MS]]",
-    "iso": "![[TIMESTAMP_ISO]]",
-    "payload": "![[RANDOM_INT_IN_RANGE]] 1 100",
-    "label": "![[RANDOM_STRING]] tick pulse beat"
+    "ts": "!{TIMESTAMP_MS}",
+    "iso": "!{TIMESTAMP_ISO}",
+    "payload": "!{RANDOM_INT_IN_RANGE} 1 100",
+    "label": "!{RANDOM_STRING} tick pulse beat"
   }
 }
 ```
 
-## Actions (`![[...]]`)
+## Actions (`!{...}`)
 
-A string value that starts with `![[ACTION_NAME]]` is evaluated on **every** REST request / WS message.
+A string value that starts with `!{ACTION_NAME}` is evaluated on **every** REST request / WS message.
 
 | Action | Arguments | Result |
 |--------|-----------|--------|
 | `RANDOM_INT_IN_RANGE` | `min max` | random integer (inclusive) |
+| `RANDOM_INT_MATRIX` | `outer inner min max` | 2D int array (e.g. slot reels) |
 | `RANDOM_FLOAT_IN_RANGE` | `min max` | random float in `[min, max)` |
+| `RANDOM_FLOAT_MATRIX` | `outer inner min max` | 2D float array |
 | `RANDOM_BOOL` | — | `true` / `false` |
 | `RANDOM_STRING` | `Word1 Word2 ...` | one random token |
 | `TIMESTAMP_MS` | — | unix time in milliseconds |
@@ -111,6 +113,7 @@ In PowerShell use `curl.exe`:
 ```powershell
 curl.exe http://127.0.0.1:8080/api/health
 curl.exe http://127.0.0.1:8080/api/roll
+curl.exe http://127.0.0.1:8080/api/spinMachine
 curl.exe -X POST http://127.0.0.1:8080/api/login
 ```
 
@@ -150,6 +153,6 @@ config-rest.json   # REST mock
 config-ws.json     # WebSocket spam
 src/main.zig       # CLI --rest / --ws
 src/config.zig     # config parsing
-src/actions.zig    # ![[ACTION]]
+src/actions.zig    # !{ACTION}
 src/server.zig     # REST + WS listeners
 ```

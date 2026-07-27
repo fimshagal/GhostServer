@@ -18,7 +18,9 @@ pub const Action = struct {
 /// Built-in actions. Add new entries here to extend the language.
 pub const builtins = [_]Action{
     .{ .name = "RANDOM_INT_IN_RANGE", .run = randomIntInRange },
+    .{ .name = "RANDOM_INT_MATRIX", .run = randomIntMatrix },
     .{ .name = "RANDOM_FLOAT_IN_RANGE", .run = randomFloatInRange },
+    .{ .name = "RANDOM_FLOAT_MATRIX", .run = randomFloatMatrix },
     .{ .name = "RANDOM_BOOL", .run = randomBool },
     .{ .name = "RANDOM_STRING", .run = randomString },
     .{ .name = "TIMESTAMP_MS", .run = timestampMs },
@@ -31,15 +33,15 @@ pub const Parsed = struct {
     args: []const u8,
 };
 
-/// Detects strings like `![[ACTION_NAME]] arg1 arg2`.
+/// Detects strings like `!{ACTION_NAME} arg1 arg2`.
 /// Returns null if the string is not an action marker.
 pub fn parse(s: []const u8) ?Parsed {
-    if (!std.mem.startsWith(u8, s, "![[")) return null;
-    const rest = s[3..];
-    const close = std.mem.indexOf(u8, rest, "]]") orelse return null;
+    if (!std.mem.startsWith(u8, s, "!{")) return null;
+    const rest = s[2..];
+    const close = std.mem.indexOfScalar(u8, rest, '}') orelse return null;
     const name = rest[0..close];
     if (name.len == 0) return null;
-    const args = std.mem.trim(u8, rest[close + 2 ..], &std.ascii.whitespace);
+    const args = std.mem.trim(u8, rest[close + 1 ..], &std.ascii.whitespace);
     return .{ .name = name, .args = args };
 }
 
@@ -106,6 +108,39 @@ fn randomIntInRange(ctx: Context, args: []const u8) !json.Value {
     return .{ .integer = ctx.random.intRangeAtMost(i64, min, max) };
 }
 
+fn randomIntMatrix(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    const outer_s = it.next() orelse return error.InvalidActionArgs;
+    const inner_s = it.next() orelse return error.InvalidActionArgs;
+    const min_s = it.next() orelse return error.InvalidActionArgs;
+    const max_s = it.next() orelse return error.InvalidActionArgs;
+    if (it.next() != null) return error.InvalidActionArgs;
+
+    const outer = try std.fmt.parseInt(usize, outer_s, 10);
+    const inner = try std.fmt.parseInt(usize, inner_s, 10);
+    const min = try std.fmt.parseInt(i64, min_s, 10);
+    const max = try std.fmt.parseInt(i64, max_s, 10);
+    if (outer == 0 or inner == 0 or min > max) return error.InvalidActionArgs;
+
+    var matrix = json.Array.init(ctx.allocator);
+    errdefer matrix.deinit();
+    try matrix.ensureTotalCapacity(outer);
+
+    var o: usize = 0;
+    while (o < outer) : (o += 1) {
+        var row = json.Array.init(ctx.allocator);
+        errdefer row.deinit();
+        try row.ensureTotalCapacity(inner);
+        var i: usize = 0;
+        while (i < inner) : (i += 1) {
+            try row.append(.{ .integer = ctx.random.intRangeAtMost(i64, min, max) });
+        }
+        try matrix.append(.{ .array = row });
+    }
+
+    return .{ .array = matrix };
+}
+
 fn randomFloatInRange(ctx: Context, args: []const u8) !json.Value {
     var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
     const min_s = it.next() orelse return error.InvalidActionArgs;
@@ -118,6 +153,40 @@ fn randomFloatInRange(ctx: Context, args: []const u8) !json.Value {
 
     const t = ctx.random.float(f64);
     return .{ .float = min + (max - min) * t };
+}
+
+fn randomFloatMatrix(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    const outer_s = it.next() orelse return error.InvalidActionArgs;
+    const inner_s = it.next() orelse return error.InvalidActionArgs;
+    const min_s = it.next() orelse return error.InvalidActionArgs;
+    const max_s = it.next() orelse return error.InvalidActionArgs;
+    if (it.next() != null) return error.InvalidActionArgs;
+
+    const outer = try std.fmt.parseInt(usize, outer_s, 10);
+    const inner = try std.fmt.parseInt(usize, inner_s, 10);
+    const min = try std.fmt.parseFloat(f64, min_s);
+    const max = try std.fmt.parseFloat(f64, max_s);
+    if (outer == 0 or inner == 0 or min > max) return error.InvalidActionArgs;
+
+    var matrix = json.Array.init(ctx.allocator);
+    errdefer matrix.deinit();
+    try matrix.ensureTotalCapacity(outer);
+
+    var o: usize = 0;
+    while (o < outer) : (o += 1) {
+        var row = json.Array.init(ctx.allocator);
+        errdefer row.deinit();
+        try row.ensureTotalCapacity(inner);
+        var i: usize = 0;
+        while (i < inner) : (i += 1) {
+            const t = ctx.random.float(f64);
+            try row.append(.{ .float = min + (max - min) * t });
+        }
+        try matrix.append(.{ .array = row });
+    }
+
+    return .{ .array = matrix };
 }
 
 fn randomBool(ctx: Context, args: []const u8) !json.Value {
@@ -232,12 +301,35 @@ test "random string picks from options" {
     }
 }
 
+test "random int matrix shape" {
+    var prng = std.Random.DefaultPrng.init(11);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+    };
+
+    const value = try randomIntMatrix(ctx, "5 3 0 7");
+    try std.testing.expect(value == .array);
+    try std.testing.expectEqual(@as(usize, 5), value.array.items.len);
+    for (value.array.items) |reel| {
+        try std.testing.expect(reel == .array);
+        try std.testing.expectEqual(@as(usize, 3), reel.array.items.len);
+        for (reel.array.items) |cell| {
+            try std.testing.expect(cell == .integer);
+            try std.testing.expect(cell.integer >= 0 and cell.integer <= 7);
+        }
+    }
+}
+
 test "parse action marker" {
-    const a = parse("![[RANDOM_INT_IN_RANGE]] 10 120").?;
+    const a = parse("!{RANDOM_INT_IN_RANGE} 10 120").?;
     try std.testing.expectEqualStrings("RANDOM_INT_IN_RANGE", a.name);
     try std.testing.expectEqualStrings("10 120", a.args);
     try std.testing.expect(parse("hello") == null);
-    try std.testing.expect(parse("![[") == null);
+    try std.testing.expect(parse("!{") == null);
 }
 
 test "random int stays in range" {
@@ -281,8 +373,8 @@ test "resolve replaces nested actions" {
     const allocator = arena.allocator();
 
     var obj = try json.ObjectMap.init(allocator, &.{}, &.{});
-    try obj.put(allocator, "id", .{ .string = "![[RANDOM_INT_IN_RANGE]] 1 1" });
-    try obj.put(allocator, "ok", .{ .string = "![[RANDOM_BOOL]]" });
+    try obj.put(allocator, "id", .{ .string = "!{RANDOM_INT_IN_RANGE} 1 1" });
+    try obj.put(allocator, "ok", .{ .string = "!{RANDOM_BOOL}" });
     try obj.put(allocator, "name", .{ .string = "Alice" });
 
     const resolved = try resolveValue(.{
