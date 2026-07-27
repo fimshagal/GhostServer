@@ -93,8 +93,10 @@ A string value that starts with `!{ACTION_NAME}` is evaluated on **every** REST 
 | Action | Arguments | Result |
 |--------|-----------|--------|
 | `RANDOM_INT_IN_RANGE` | `min max` | random integer (inclusive) |
+| `RANDOM_INT` | `n1 n2 ...` | one of the listed integers |
 | `RANDOM_INT_MATRIX` | `outer inner min max` | 2D int array (e.g. slot reels) |
 | `RANDOM_FLOAT_IN_RANGE` | `min max` | random float in `[min, max)` |
+| `RANDOM_FLOAT` | `f1 f2 ...` | one of the listed floats |
 | `RANDOM_FLOAT_MATRIX` | `outer inner min max` | 2D float array |
 | `RANDOM_BOOL` | — | `true` / `false` |
 | `RANDOM_STRING` | `Word1 Word2 ...` | one random token |

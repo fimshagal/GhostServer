@@ -18,8 +18,10 @@ pub const Action = struct {
 /// Built-in actions. Add new entries here to extend the language.
 pub const builtins = [_]Action{
     .{ .name = "RANDOM_INT_IN_RANGE", .run = randomIntInRange },
+    .{ .name = "RANDOM_INT", .run = randomInt },
     .{ .name = "RANDOM_INT_MATRIX", .run = randomIntMatrix },
     .{ .name = "RANDOM_FLOAT_IN_RANGE", .run = randomFloatInRange },
+    .{ .name = "RANDOM_FLOAT", .run = randomFloat },
     .{ .name = "RANDOM_FLOAT_MATRIX", .run = randomFloatMatrix },
     .{ .name = "RANDOM_BOOL", .run = randomBool },
     .{ .name = "RANDOM_STRING", .run = randomString },
@@ -108,6 +110,20 @@ fn randomIntInRange(ctx: Context, args: []const u8) !json.Value {
     return .{ .integer = ctx.random.intRangeAtMost(i64, min, max) };
 }
 
+fn randomInt(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(i64) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try std.fmt.parseInt(i64, token, 10));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const index = ctx.random.uintLessThan(usize, options.items.len);
+    return .{ .integer = options.items[index] };
+}
+
 fn randomIntMatrix(ctx: Context, args: []const u8) !json.Value {
     var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
     const outer_s = it.next() orelse return error.InvalidActionArgs;
@@ -153,6 +169,20 @@ fn randomFloatInRange(ctx: Context, args: []const u8) !json.Value {
 
     const t = ctx.random.float(f64);
     return .{ .float = min + (max - min) * t };
+}
+
+fn randomFloat(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(f64) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try std.fmt.parseFloat(f64, token));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const index = ctx.random.uintLessThan(usize, options.items.len);
+    return .{ .float = options.items[index] };
 }
 
 fn randomFloatMatrix(ctx: Context, args: []const u8) !json.Value {
@@ -298,6 +328,28 @@ test "random string picks from options" {
             std.mem.eql(u8, value.string, "Beta") or
             std.mem.eql(u8, value.string, "Gama");
         try std.testing.expect(ok);
+    }
+}
+
+test "random int and float pick from list" {
+    var prng = std.Random.DefaultPrng.init(5);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+    };
+
+    var i: usize = 0;
+    while (i < 20) : (i += 1) {
+        const iv = try randomInt(ctx, "1 2 3");
+        try std.testing.expect(iv == .integer);
+        try std.testing.expect(iv.integer == 1 or iv.integer == 2 or iv.integer == 3);
+
+        const fv = try randomFloat(ctx, "0.1 0.2 0.3");
+        try std.testing.expect(fv == .float);
+        try std.testing.expect(fv.float == 0.1 or fv.float == 0.2 or fv.float == 0.3);
     }
 }
 
