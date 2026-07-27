@@ -1,11 +1,53 @@
 const std = @import("std");
 const json = std.json;
 
+/// Shared round-robin counters for SEQUENCE_* actions (server lifetime).
+pub const SequenceState = struct {
+    allocator: std.mem.Allocator,
+    mutex: std.Io.Mutex = .init,
+    map: std.StringHashMap(usize),
+
+    pub fn init(allocator: std.mem.Allocator) SequenceState {
+        return .{
+            .allocator = allocator,
+            .map = std.StringHashMap(usize).init(allocator),
+        };
+    }
+
+    pub fn deinit(self: *SequenceState) void {
+        var it = self.map.keyIterator();
+        while (it.next()) |key| {
+            self.allocator.free(key.*);
+        }
+        self.map.deinit();
+        self.* = undefined;
+    }
+
+    /// Returns the next index in `0..len`, advancing the counter for `key`.
+    pub fn next(self: *SequenceState, io: std.Io, key: []const u8, len: usize) !usize {
+        if (len == 0) return error.InvalidActionArgs;
+
+        self.mutex.lockUncancelable(io);
+        defer self.mutex.unlock(io);
+
+        const gop = try self.map.getOrPut(key);
+        if (!gop.found_existing) {
+            errdefer _ = self.map.remove(key);
+            gop.key_ptr.* = try self.allocator.dupe(u8, key);
+            gop.value_ptr.* = 0;
+        }
+        const idx = gop.value_ptr.* % len;
+        gop.value_ptr.* += 1;
+        return idx;
+    }
+};
+
 /// Per-request context passed into action handlers.
 pub const Context = struct {
     allocator: std.mem.Allocator,
     random: std.Random,
     io: std.Io,
+    sequences: *SequenceState,
 };
 
 pub const ActionFn = *const fn (ctx: Context, args: []const u8) anyerror!json.Value;
@@ -25,6 +67,10 @@ pub const builtins = [_]Action{
     .{ .name = "RANDOM_FLOAT_MATRIX", .run = randomFloatMatrix },
     .{ .name = "RANDOM_BOOL", .run = randomBool },
     .{ .name = "RANDOM_STRING", .run = randomString },
+    .{ .name = "SEQUENCE_INT", .run = sequenceInt },
+    .{ .name = "SEQUENCE_FLOAT", .run = sequenceFloat },
+    .{ .name = "SEQUENCE_BOOL", .run = sequenceBool },
+    .{ .name = "SEQUENCE_STRING", .run = sequenceString },
     .{ .name = "TIMESTAMP_MS", .run = timestampMs },
     .{ .name = "TIMESTAMP_ISO", .run = timestampIso },
     .{ .name = "UUID", .run = uuid },
@@ -238,6 +284,73 @@ fn randomString(ctx: Context, args: []const u8) !json.Value {
     return .{ .string = options.items[index] };
 }
 
+fn parseBoolToken(token: []const u8) !bool {
+    if (std.ascii.eqlIgnoreCase(token, "true")) return true;
+    if (std.ascii.eqlIgnoreCase(token, "false")) return false;
+    return error.InvalidActionArgs;
+}
+
+fn sequenceIndex(ctx: Context, name: []const u8, args: []const u8, len: usize) !usize {
+    const key = try std.fmt.allocPrint(ctx.allocator, "{s} {s}", .{ name, args });
+    return ctx.sequences.next(ctx.io, key, len);
+}
+
+fn sequenceInt(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(i64) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try std.fmt.parseInt(i64, token, 10));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const index = try sequenceIndex(ctx, "SEQUENCE_INT", args, options.items.len);
+    return .{ .integer = options.items[index] };
+}
+
+fn sequenceFloat(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(f64) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try std.fmt.parseFloat(f64, token));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const index = try sequenceIndex(ctx, "SEQUENCE_FLOAT", args, options.items.len);
+    return .{ .float = options.items[index] };
+}
+
+fn sequenceBool(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(bool) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try parseBoolToken(token));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const index = try sequenceIndex(ctx, "SEQUENCE_BOOL", args, options.items.len);
+    return .{ .bool = options.items[index] };
+}
+
+fn sequenceString(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList([]const u8) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |word| {
+        try options.append(ctx.allocator, word);
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const index = try sequenceIndex(ctx, "SEQUENCE_STRING", args, options.items.len);
+    return .{ .string = options.items[index] };
+}
+
 fn timestampMs(ctx: Context, args: []const u8) !json.Value {
     try requireNoArgs(args);
     const ts = std.Io.Timestamp.now(ctx.io, .real);
@@ -294,10 +407,13 @@ test "uuid has expected shape" {
     var prng = std.Random.DefaultPrng.init(123);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
     const ctx: Context = .{
         .allocator = arena.allocator(),
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     };
 
     const value = try uuid(ctx, "");
@@ -314,10 +430,13 @@ test "random string picks from options" {
     var prng = std.Random.DefaultPrng.init(99);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
     const ctx: Context = .{
         .allocator = arena.allocator(),
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     };
 
     var i: usize = 0;
@@ -335,10 +454,13 @@ test "random int and float pick from list" {
     var prng = std.Random.DefaultPrng.init(5);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
     const ctx: Context = .{
         .allocator = arena.allocator(),
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     };
 
     var i: usize = 0;
@@ -357,10 +479,13 @@ test "random int matrix shape" {
     var prng = std.Random.DefaultPrng.init(11);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
     const ctx: Context = .{
         .allocator = arena.allocator(),
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     };
 
     const value = try randomIntMatrix(ctx, "5 3 0 7");
@@ -386,10 +511,13 @@ test "parse action marker" {
 
 test "random int stays in range" {
     var prng = std.Random.DefaultPrng.init(42);
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
     const ctx: Context = .{
         .allocator = std.testing.allocator,
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     };
     var i: usize = 0;
     while (i < 50) : (i += 1) {
@@ -403,10 +531,13 @@ test "timestamp actions produce values" {
     var prng = std.Random.DefaultPrng.init(1);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
     const ctx: Context = .{
         .allocator = arena.allocator(),
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     };
 
     const ms = try timestampMs(ctx, "");
@@ -423,6 +554,8 @@ test "resolve replaces nested actions" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
 
     var obj = try json.ObjectMap.init(allocator, &.{}, &.{});
     try obj.put(allocator, "id", .{ .string = "!{RANDOM_INT_IN_RANGE} 1 1" });
@@ -433,9 +566,57 @@ test "resolve replaces nested actions" {
         .allocator = allocator,
         .random = prng.random(),
         .io = std.testing.io,
+        .sequences = &sequences,
     }, .{ .object = obj });
     try std.testing.expect(resolved == .object);
     try std.testing.expectEqual(@as(i64, 1), resolved.object.get("id").?.integer);
     try std.testing.expect(resolved.object.get("ok").? == .bool);
     try std.testing.expectEqualStrings("Alice", resolved.object.get("name").?.string);
+}
+
+test "sequence int cycles round-robin" {
+    var prng = std.Random.DefaultPrng.init(1);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+        .sequences = &sequences,
+    };
+
+    const expected = [_]i64{ 1, 2, 3, 1, 2, 3, 1 };
+    for (expected) |want| {
+        const value = try sequenceInt(ctx, "1 2 3");
+        try std.testing.expect(value == .integer);
+        try std.testing.expectEqual(want, value.integer);
+    }
+}
+
+test "sequence string float bool cycle" {
+    var prng = std.Random.DefaultPrng.init(1);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+        .sequences = &sequences,
+    };
+
+    try std.testing.expectEqualStrings("a", (try sequenceString(ctx, "a b")).string);
+    try std.testing.expectEqualStrings("b", (try sequenceString(ctx, "a b")).string);
+    try std.testing.expectEqualStrings("a", (try sequenceString(ctx, "a b")).string);
+
+    try std.testing.expectEqual(@as(f64, 0.1), (try sequenceFloat(ctx, "0.1 0.2")).float);
+    try std.testing.expectEqual(@as(f64, 0.2), (try sequenceFloat(ctx, "0.1 0.2")).float);
+    try std.testing.expectEqual(@as(f64, 0.1), (try sequenceFloat(ctx, "0.1 0.2")).float);
+
+    try std.testing.expectEqual(true, (try sequenceBool(ctx, "true false")).bool);
+    try std.testing.expectEqual(false, (try sequenceBool(ctx, "true false")).bool);
+    try std.testing.expectEqual(true, (try sequenceBool(ctx, "true false")).bool);
 }

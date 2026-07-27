@@ -179,12 +179,14 @@ pub fn renderTemplate(
     as_json: bool,
     random: std.Random,
     io: std.Io,
+    sequences: *actions.SequenceState,
 ) ![]u8 {
     const value = template orelse return try allocator.dupe(u8, "");
     const ctx: actions.Context = .{
         .allocator = allocator,
         .random = random,
         .io = io,
+        .sequences = sequences,
     };
     const resolved = try actions.resolveValue(ctx, value);
     return renderValue(allocator, resolved, as_json);
@@ -196,8 +198,9 @@ pub fn renderBody(
     route: *const Route,
     random: std.Random,
     io: std.Io,
+    sequences: *actions.SequenceState,
 ) ![]u8 {
-    return renderTemplate(allocator, route.body_template, route.body_is_json, random, io);
+    return renderTemplate(allocator, route.body_template, route.body_is_json, random, io, sequences);
 }
 
 /// Resolve WS message template.
@@ -206,8 +209,9 @@ pub fn renderMessage(
     config: *const Config,
     random: std.Random,
     io: std.Io,
+    sequences: *actions.SequenceState,
 ) ![]u8 {
-    return renderTemplate(allocator, config.message_template, config.message_is_json, random, io);
+    return renderTemplate(allocator, config.message_template, config.message_is_json, random, io, sequences);
 }
 
 fn renderValue(allocator: std.mem.Allocator, value: json.Value, as_json: bool) ![]u8 {
@@ -325,10 +329,42 @@ test "renderBody expands actions" {
     var prng = std.Random.DefaultPrng.init(1);
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    var sequences = actions.SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
 
-    const body = try renderBody(arena.allocator(), &config.routes[0], prng.random(), std.testing.io);
+    const body = try renderBody(arena.allocator(), &config.routes[0], prng.random(), std.testing.io, &sequences);
     var parsed = try json.parseFromSlice(json.Value, std.testing.allocator, body, .{});
     defer parsed.deinit();
     try std.testing.expectEqual(@as(i64, 5), parsed.value.object.get("id").?.integer);
     try std.testing.expect(parsed.value.object.get("flag").? == .bool);
+}
+
+test "renderBody sequence advances across calls" {
+    const src =
+        \\{
+        \\  "mode": "rest",
+        \\  "routes": [
+        \\    {
+        \\      "path": "/api/seq",
+        \\      "body": { "n": "!{SEQUENCE_INT} 1 2 3" }
+        \\    }
+        \\  ]
+        \\}
+    ;
+    var config = try parse(std.testing.allocator, src);
+    defer deinit(&config);
+
+    var prng = std.Random.DefaultPrng.init(1);
+    var sequences = actions.SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+
+    const expected = [_]i64{ 1, 2, 3, 1 };
+    for (expected) |want| {
+        var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena.deinit();
+        const body = try renderBody(arena.allocator(), &config.routes[0], prng.random(), std.testing.io, &sequences);
+        var parsed = try json.parseFromSlice(json.Value, std.testing.allocator, body, .{});
+        defer parsed.deinit();
+        try std.testing.expectEqual(want, parsed.value.object.get("n").?.integer);
+    }
 }

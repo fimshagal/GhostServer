@@ -1,5 +1,6 @@
 const std = @import("std");
 const config_mod = @import("config.zig");
+const actions = @import("actions.zig");
 const Config = config_mod.Config;
 const Route = config_mod.Route;
 
@@ -23,23 +24,26 @@ pub fn run(io: Io, rest: ?*const Config, ws: ?*const Config) !void {
         }
     }
 
+    var sequences = actions.SequenceState.init(std.heap.page_allocator);
+    defer sequences.deinit();
+
     if (rest != null and ws != null) {
-        const thread = try std.Thread.spawn(.{}, runRestForever, .{ io, rest.? });
+        const thread = try std.Thread.spawn(.{}, runRestForever, .{ io, rest.?, &sequences });
         thread.detach();
-        try runWs(io, ws.?);
+        try runWs(io, ws.?, &sequences);
         return;
     }
 
     if (rest) |rest_config| {
-        try runRest(io, rest_config);
+        try runRest(io, rest_config, &sequences);
         return;
     }
 
-    try runWs(io, ws.?);
+    try runWs(io, ws.?, &sequences);
 }
 
-fn runRestForever(io: Io, config: *const Config) void {
-    runRest(io, config) catch |err| {
+fn runRestForever(io: Io, config: *const Config, sequences: *actions.SequenceState) void {
+    runRest(io, config, sequences) catch |err| {
         std.log.err("REST server stopped: {s}", .{@errorName(err)});
     };
 }
@@ -63,7 +67,7 @@ fn listen(io: Io, config: *const Config) !net.Server {
     };
 }
 
-pub fn runRest(io: Io, config: *const Config) !void {
+pub fn runRest(io: Io, config: *const Config, sequences: *actions.SequenceState) !void {
     var listener = try listen(io, config);
     defer listener.deinit(io);
 
@@ -79,7 +83,7 @@ pub fn runRest(io: Io, config: *const Config) !void {
             continue;
         };
 
-        const thread = std.Thread.spawn(.{}, handleRestConnection, .{ io, stream, config }) catch |err| {
+        const thread = std.Thread.spawn(.{}, handleRestConnection, .{ io, stream, config, sequences }) catch |err| {
             std.log.err("failed to spawn REST connection thread: {s}", .{@errorName(err)});
             stream.close(io);
             continue;
@@ -88,7 +92,7 @@ pub fn runRest(io: Io, config: *const Config) !void {
     }
 }
 
-pub fn runWs(io: Io, config: *const Config) !void {
+pub fn runWs(io: Io, config: *const Config, sequences: *actions.SequenceState) !void {
     var listener = try listen(io, config);
     defer listener.deinit(io);
 
@@ -101,7 +105,7 @@ pub fn runWs(io: Io, config: *const Config) !void {
             continue;
         };
 
-        const thread = std.Thread.spawn(.{}, handleWsConnection, .{ io, stream, config }) catch |err| {
+        const thread = std.Thread.spawn(.{}, handleWsConnection, .{ io, stream, config, sequences }) catch |err| {
             std.log.err("failed to spawn WS connection thread: {s}", .{@errorName(err)});
             stream.close(io);
             continue;
@@ -110,7 +114,7 @@ pub fn runWs(io: Io, config: *const Config) !void {
     }
 }
 
-fn handleRestConnection(io: Io, stream: net.Stream, config: *const Config) void {
+fn handleRestConnection(io: Io, stream: net.Stream, config: *const Config, sequences: *actions.SequenceState) void {
     defer stream.close(io);
 
     var recv_buffer: [16 * 1024]u8 = undefined;
@@ -128,14 +132,14 @@ fn handleRestConnection(io: Io, stream: net.Stream, config: *const Config) void 
             },
         };
 
-        serveRestRequest(io, &request, config) catch |err| {
+        serveRestRequest(io, &request, config, sequences) catch |err| {
             std.log.err("failed to serve REST request: {s}", .{@errorName(err)});
             return;
         };
     }
 }
 
-fn serveRestRequest(io: Io, request: *http.Server.Request, config: *const Config) !void {
+fn serveRestRequest(io: Io, request: *http.Server.Request, config: *const Config, sequences: *actions.SequenceState) !void {
     const method_name = @tagName(request.head.method);
     const path = config_mod.pathWithoutQuery(request.head.target);
 
@@ -143,7 +147,7 @@ fn serveRestRequest(io: Io, request: *http.Server.Request, config: *const Config
 
     if (config.cors and request.head.method == .OPTIONS) {
         if (config_mod.findRoute(config, method_name, path)) |route| {
-            try respondRoute(io, request, config, route);
+            try respondRoute(io, request, config, route, sequences);
             return;
         }
         try respondCorsPreflight(request);
@@ -151,7 +155,7 @@ fn serveRestRequest(io: Io, request: *http.Server.Request, config: *const Config
     }
 
     if (config_mod.findRoute(config, method_name, path)) |route| {
-        try respondRoute(io, request, config, route);
+        try respondRoute(io, request, config, route, sequences);
         return;
     }
 
@@ -163,6 +167,7 @@ fn respondRoute(
     request: *http.Server.Request,
     config: *const Config,
     route: *const Route,
+    sequences: *actions.SequenceState,
 ) !void {
     if (route.delay_ms > 0) {
         try io.sleep(.fromMilliseconds(@intCast(route.delay_ms)), .awake);
@@ -176,7 +181,7 @@ fn respondRoute(
     io.random(std.mem.asBytes(&seed));
     var prng = std.Random.DefaultPrng.init(seed);
 
-    const body = config_mod.renderBody(allocator, route, prng.random(), io) catch |err| {
+    const body = config_mod.renderBody(allocator, route, prng.random(), io, sequences) catch |err| {
         std.log.err("failed to render body for {s} {s}: {s}", .{ route.method, route.path, @errorName(err) });
         return err;
     };
@@ -206,7 +211,7 @@ fn respondRoute(
     });
 }
 
-fn handleWsConnection(io: Io, stream: net.Stream, config: *const Config) void {
+fn handleWsConnection(io: Io, stream: net.Stream, config: *const Config, sequences: *actions.SequenceState) void {
     defer stream.close(io);
 
     var recv_buffer: [16 * 1024]u8 = undefined;
@@ -275,7 +280,7 @@ fn handleWsConnection(io: Io, stream: net.Stream, config: *const Config) void {
         io.random(std.mem.asBytes(&seed));
         var prng = std.Random.DefaultPrng.init(seed);
 
-        const payload = config_mod.renderMessage(arena.allocator(), config, prng.random(), io) catch |err| {
+        const payload = config_mod.renderMessage(arena.allocator(), config, prng.random(), io, sequences) catch |err| {
             std.log.err("failed to render WS message: {s}", .{@errorName(err)});
             break;
         };

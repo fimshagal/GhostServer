@@ -102,9 +102,15 @@ A string value that starts with `!{ACTION_NAME}` is evaluated on **every** REST 
 | `RANDOM_FLOAT_MATRIX` | `outer inner min max` | 2D float array |
 | `RANDOM_BOOL` | — | `true` / `false` |
 | `RANDOM_STRING` | `Word1 Word2 ...` | one random token |
+| `SEQUENCE_INT` | `n1 n2 ...` | round-robin through listed integers |
+| `SEQUENCE_FLOAT` | `f1 f2 ...` | round-robin through listed floats |
+| `SEQUENCE_BOOL` | `b1 b2 ...` | round-robin through listed bools (`true`/`false`) |
+| `SEQUENCE_STRING` | `Word1 Word2 ...` | round-robin through listed tokens |
 | `TIMESTAMP_MS` | — | unix time in milliseconds |
 | `TIMESTAMP_ISO` | — | `YYYY-MM-DDTHH:MM:SSZ` |
 | `UUID` | — | random UUID v4 string |
+
+Identical `!{SEQUENCE_*}` markers share one counter for the lifetime of the process (e.g. `"!{SEQUENCE_INT} 1 2 3"` → `1`, then `2`, then `3`, then `1`, …).
 
 Add new actions in `src/actions.zig` (`builtins`).
 
@@ -117,6 +123,7 @@ In PowerShell use `curl.exe`:
 ```powershell
 curl.exe http://127.0.0.1:8080/api/health
 curl.exe http://127.0.0.1:8080/api/roll
+curl.exe http://127.0.0.1:8080/api/scenario
 curl.exe http://127.0.0.1:8080/api/spinMachine
 curl.exe -X POST http://127.0.0.1:8080/api/login
 ```

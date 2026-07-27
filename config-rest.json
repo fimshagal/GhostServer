@@ -52,6 +52,16 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/api/scenario",
+      "body": {
+        "step": "!{SEQUENCE_INT} 1 2 3",
+        "label": "!{SEQUENCE_STRING} start mid end",
+        "ready": "!{SEQUENCE_BOOL} false false true",
+        "factor": "!{SEQUENCE_FLOAT} 0.5 1.0 1.5"
+      }
+    },
+    {
       "method": "POST",
       "path": "/api/login",
       "status": 401,
