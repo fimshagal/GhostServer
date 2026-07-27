@@ -1,0 +1,58 @@
+{
+  "mode": "rest",
+  "host": "127.0.0.1",
+  "port": 8080,
+  "cors": true,
+  "routes": [
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "status": 200,
+      "body": { "status": "ok" }
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "status": 200,
+      "headers": {
+        "X-Mock": "ghost-server"
+      },
+      "body": {
+        "users": [
+          { "id": 1, "name": "Alice" },
+          { "id": 2, "name": "Bob" }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/users/:id",
+      "status": 200,
+      "body": {
+        "id": "![[RANDOM_INT_IN_RANGE]] 1 1000",
+        "score": "![[RANDOM_FLOAT_IN_RANGE]] 0.0 100.0",
+        "active": "![[RANDOM_BOOL]]",
+        "name": "![[RANDOM_STRING]] Alpha Beta Gama"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/roll",
+      "body": {
+        "dice": "![[RANDOM_INT_IN_RANGE]] 1 6"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/login",
+      "status": 401,
+      "delay_ms": 200,
+      "body": { "error": "invalid_credentials" }
+    },
+    {
+      "method": "GET",
+      "path": "/api/ping",
+      "body": "pong"
+    }
+  ]
+}

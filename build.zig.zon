@@ -1,0 +1,14 @@
+.{
+    .name = .GhostServerZig,
+    .version = "0.1.0",
+    .fingerprint = 0x80e52c473cd328cb, // Changing this has security and trust implications.
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{},
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "config-rest.json",
+        "config-ws.json",
+    },
+}

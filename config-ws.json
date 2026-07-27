@@ -1,0 +1,13 @@
+{
+  "mode": "ws",
+  "host": "127.0.0.1",
+  "port": 8081,
+  "path": "/ws",
+  "interval_ms": 1000,
+  "message": {
+    "ts": "![[TIMESTAMP_MS]]",
+    "iso": "![[TIMESTAMP_ISO]]",
+    "payload": "![[RANDOM_INT_IN_RANGE]] 1 100",
+    "label": "![[RANDOM_STRING]] tick pulse beat"
+  }
+}
