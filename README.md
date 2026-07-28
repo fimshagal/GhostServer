@@ -102,13 +102,20 @@ A string value that starts with `!{ACTION_NAME}` is evaluated on **every** REST 
 | `RANDOM_FLOAT_MATRIX` | `outer inner min max` | 2D float array |
 | `RANDOM_BOOL` | — | `true` / `false` |
 | `RANDOM_STRING` | `Word1 Word2 ...` | one random token |
+| `NULLABLE_RANDOM_INT` | `n1 n2 ...` | one listed int, or `null` |
+| `NULLABLE_RANDOM_FLOAT` | `f1 f2 ...` | one listed float, or `null` |
+| `NULLABLE_RANDOM_BOOL` | — | `true` / `false` / `null` |
+| `NULLABLE_RANDOM_STRING` | `Word1 Word2 ...` | one listed token, or `null` |
 | `SEQUENCE_INT` | `n1 n2 ...` | round-robin through listed integers |
 | `SEQUENCE_FLOAT` | `f1 f2 ...` | round-robin through listed floats |
 | `SEQUENCE_BOOL` | `b1 b2 ...` | round-robin through listed bools (`true`/`false`) |
 | `SEQUENCE_STRING` | `Word1 Word2 ...` | round-robin through listed tokens |
 | `LOREM` | `n` | `n` words of lorem ipsum text |
+| `BASE64` | `png` \| `jpg` | fake image bytes as base64 (`jpeg` alias for `jpg`) |
+| `NULLABLE_BASE64` | `png` \| `jpg` | same as `BASE64`, or `null` |
 | `TIMESTAMP_MS` | — | unix time in milliseconds |
 | `TIMESTAMP_ISO` | — | `YYYY-MM-DDTHH:MM:SSZ` |
+| `ID` | — | random 8-digit integer (`10000000`…`99999999`) |
 | `UUID` | — | random UUID v4 string |
 
 Identical `!{SEQUENCE_*}` markers share one counter for the lifetime of the process (e.g. `"!{SEQUENCE_INT} 1 2 3"` → `1`, then `2`, then `3`, then `1`, …).

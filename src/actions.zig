@@ -67,13 +67,20 @@ pub const builtins = [_]Action{
     .{ .name = "RANDOM_FLOAT_MATRIX", .run = randomFloatMatrix },
     .{ .name = "RANDOM_BOOL", .run = randomBool },
     .{ .name = "RANDOM_STRING", .run = randomString },
+    .{ .name = "NULLABLE_RANDOM_INT", .run = nullableRandomInt },
+    .{ .name = "NULLABLE_RANDOM_FLOAT", .run = nullableRandomFloat },
+    .{ .name = "NULLABLE_RANDOM_BOOL", .run = nullableRandomBool },
+    .{ .name = "NULLABLE_RANDOM_STRING", .run = nullableRandomString },
     .{ .name = "SEQUENCE_INT", .run = sequenceInt },
     .{ .name = "SEQUENCE_FLOAT", .run = sequenceFloat },
     .{ .name = "SEQUENCE_BOOL", .run = sequenceBool },
     .{ .name = "SEQUENCE_STRING", .run = sequenceString },
     .{ .name = "LOREM", .run = lorem },
+    .{ .name = "BASE64", .run = base64File },
+    .{ .name = "NULLABLE_BASE64", .run = nullableBase64File },
     .{ .name = "TIMESTAMP_MS", .run = timestampMs },
     .{ .name = "TIMESTAMP_ISO", .run = timestampIso },
+    .{ .name = "ID", .run = simpleId },
     .{ .name = "UUID", .run = uuid },
 };
 
@@ -285,6 +292,61 @@ fn randomString(ctx: Context, args: []const u8) !json.Value {
     return .{ .string = options.items[index] };
 }
 
+fn nullableRandomInt(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(i64) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try std.fmt.parseInt(i64, token, 10));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const pick = ctx.random.uintLessThan(usize, options.items.len + 1);
+    if (pick == options.items.len) return .null;
+    return .{ .integer = options.items[pick] };
+}
+
+fn nullableRandomFloat(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList(f64) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |token| {
+        try options.append(ctx.allocator, try std.fmt.parseFloat(f64, token));
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const pick = ctx.random.uintLessThan(usize, options.items.len + 1);
+    if (pick == options.items.len) return .null;
+    return .{ .float = options.items[pick] };
+}
+
+fn nullableRandomBool(ctx: Context, args: []const u8) !json.Value {
+    try requireNoArgs(args);
+    const pick = ctx.random.uintLessThan(u8, 3);
+    return switch (pick) {
+        0 => .{ .bool = true },
+        1 => .{ .bool = false },
+        else => .null,
+    };
+}
+
+fn nullableRandomString(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    var options: std.ArrayList([]const u8) = .empty;
+    defer options.deinit(ctx.allocator);
+
+    while (it.next()) |word| {
+        try options.append(ctx.allocator, word);
+    }
+    if (options.items.len == 0) return error.InvalidActionArgs;
+
+    const pick = ctx.random.uintLessThan(usize, options.items.len + 1);
+    if (pick == options.items.len) return .null;
+    return .{ .string = options.items[pick] };
+}
+
 fn parseBoolToken(token: []const u8) !bool {
     if (std.ascii.eqlIgnoreCase(token, "true")) return true;
     if (std.ascii.eqlIgnoreCase(token, "false")) return false;
@@ -390,6 +452,39 @@ fn lorem(ctx: Context, args: []const u8) !json.Value {
     return .{ .string = try out.toOwnedSlice(ctx.allocator) };
 }
 
+/// Fake file payload: magic header + random bytes, returned as base64.
+fn base64File(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    const kind = it.next() orelse return error.InvalidActionArgs;
+    if (it.next() != null) return error.InvalidActionArgs;
+
+    var bytes: [96]u8 = undefined;
+    ctx.random.bytes(&bytes);
+
+    if (std.ascii.eqlIgnoreCase(kind, "png")) {
+        const sig = [_]u8{ 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        @memcpy(bytes[0..sig.len], &sig);
+    } else if (std.ascii.eqlIgnoreCase(kind, "jpg") or std.ascii.eqlIgnoreCase(kind, "jpeg")) {
+        bytes[0] = 0xFF;
+        bytes[1] = 0xD8;
+        bytes[2] = 0xFF;
+        bytes[bytes.len - 2] = 0xFF;
+        bytes[bytes.len - 1] = 0xD9;
+    } else {
+        return error.InvalidActionArgs;
+    }
+
+    const encoder = std.base64.standard.Encoder;
+    const out = try ctx.allocator.alloc(u8, encoder.calcSize(bytes.len));
+    _ = encoder.encode(out, &bytes);
+    return .{ .string = out };
+}
+
+fn nullableBase64File(ctx: Context, args: []const u8) !json.Value {
+    if (ctx.random.boolean()) return .null;
+    return base64File(ctx, args);
+}
+
 fn timestampMs(ctx: Context, args: []const u8) !json.Value {
     try requireNoArgs(args);
     const ts = std.Io.Timestamp.now(ctx.io, .real);
@@ -419,6 +514,12 @@ fn timestampIso(ctx: Context, args: []const u8) !json.Value {
         },
     );
     return .{ .string = formatted };
+}
+
+fn simpleId(ctx: Context, args: []const u8) !json.Value {
+    try requireNoArgs(args);
+    // Eight-digit numeric id: 10000000 … 99999999
+    return .{ .integer = ctx.random.intRangeAtMost(i64, 10_000_000, 99_999_999) };
 }
 
 fn uuid(ctx: Context, args: []const u8) !json.Value {
@@ -463,6 +564,25 @@ test "uuid has expected shape" {
     try std.testing.expectEqual(@as(u8, '4'), value.string[14]);
     try std.testing.expectEqual(@as(u8, '-'), value.string[18]);
     try std.testing.expectEqual(@as(u8, '-'), value.string[23]);
+}
+
+test "id is eight digit integer" {
+    var prng = std.Random.DefaultPrng.init(55);
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+    const ctx: Context = .{
+        .allocator = std.testing.allocator,
+        .random = prng.random(),
+        .io = std.testing.io,
+        .sequences = &sequences,
+    };
+
+    var i: usize = 0;
+    while (i < 40) : (i += 1) {
+        const value = try simpleId(ctx, "");
+        try std.testing.expect(value == .integer);
+        try std.testing.expect(value.integer >= 10_000_000 and value.integer <= 99_999_999);
+    }
 }
 
 test "random string picks from options" {
@@ -683,4 +803,82 @@ test "lorem returns requested word count" {
     var it = std.mem.tokenizeAny(u8, longer.string, &std.ascii.whitespace);
     while (it.next()) |_| words += 1;
     try std.testing.expectEqual(@as(usize, 25), words);
+}
+
+test "nullable random can return null or listed values" {
+    var prng = std.Random.DefaultPrng.init(3);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+        .sequences = &sequences,
+    };
+
+    var saw_null = false;
+    var saw_value = false;
+    var i: usize = 0;
+    while (i < 40) : (i += 1) {
+        const v = try nullableRandomInt(ctx, "1 2 3");
+        switch (v) {
+            .null => saw_null = true,
+            .integer => |n| {
+                try std.testing.expect(n == 1 or n == 2 or n == 3);
+                saw_value = true;
+            },
+            else => try std.testing.expect(false),
+        }
+    }
+    try std.testing.expect(saw_null);
+    try std.testing.expect(saw_value);
+
+    const b = try nullableRandomBool(ctx, "");
+    try std.testing.expect(b == .null or b == .bool);
+}
+
+test "base64 png and jpg have expected magic when decoded" {
+    var prng = std.Random.DefaultPrng.init(9);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+        .sequences = &sequences,
+    };
+
+    const png = try base64File(ctx, "png");
+    try std.testing.expect(png == .string);
+    var png_buf: [96]u8 = undefined;
+    const png_len = try std.base64.standard.Decoder.calcSizeForSlice(png.string);
+    _ = try std.base64.standard.Decoder.decode(png_buf[0..png_len], png.string);
+    try std.testing.expectEqual(@as(u8, 0x89), png_buf[0]);
+    try std.testing.expectEqual(@as(u8, 'P'), png_buf[1]);
+
+    const jpg = try base64File(ctx, "jpg");
+    try std.testing.expect(jpg == .string);
+    var jpg_buf: [96]u8 = undefined;
+    const jpg_len = try std.base64.standard.Decoder.calcSizeForSlice(jpg.string);
+    _ = try std.base64.standard.Decoder.decode(jpg_buf[0..jpg_len], jpg.string);
+    try std.testing.expectEqual(@as(u8, 0xFF), jpg_buf[0]);
+    try std.testing.expectEqual(@as(u8, 0xD8), jpg_buf[1]);
+
+    var saw_null = false;
+    var saw_png = false;
+    var i: usize = 0;
+    while (i < 40) : (i += 1) {
+        const v = try nullableBase64File(ctx, "png");
+        switch (v) {
+            .null => saw_null = true,
+            .string => saw_png = true,
+            else => try std.testing.expect(false),
+        }
+    }
+    try std.testing.expect(saw_null);
+    try std.testing.expect(saw_png);
 }

@@ -77,6 +77,26 @@ export const restExamples: RestExampleDef[] = [
 }`,
   },
   {
+    id: "media",
+    title: "Base64 + nullable",
+    description: "BASE64 png/jpg plus NULLABLE_RANDOM_* (value or null).",
+    method: "GET",
+    path: "/api/media",
+    config: `{
+  "method": "GET",
+  "path": "/api/media",
+  "body": {
+    "png": "!{BASE64} png",
+    "jpg": "!{BASE64} jpg",
+    "maybePng": "!{NULLABLE_BASE64} png",
+    "score": "!{NULLABLE_RANDOM_INT} 1 2 3",
+    "ratio": "!{NULLABLE_RANDOM_FLOAT} 1.1 2.1 3.1",
+    "flag": "!{NULLABLE_RANDOM_BOOL}",
+    "tag": "!{NULLABLE_RANDOM_STRING} a b c"
+  }
+}`,
+  },
+  {
     id: "spin",
     title: "Slot spin",
     description: "UUID + RANDOM_INT_MATRIX (5×3 reels).",
@@ -117,7 +137,7 @@ export const restExamples: RestExampleDef[] = [
   {
     id: "user",
     title: "User by id",
-    description: "UUID, float score, bool, random name.",
+    description: "ID, UUID, float score, bool, random name.",
     method: "GET",
     path: "/api/users/42",
     config: `{
@@ -125,7 +145,8 @@ export const restExamples: RestExampleDef[] = [
   "path": "/api/users/:id",
   "status": 200,
   "body": {
-    "id": "!{UUID}",
+    "id": "!{ID}",
+    "uuid": "!{UUID}",
     "score": "!{RANDOM_FLOAT_IN_RANGE} 0.0 100.0",
     "active": "!{RANDOM_BOOL}",
     "name": "!{RANDOM_STRING} Alpha Beta Gama"
@@ -203,6 +224,26 @@ export const actionDocs: ActionDef[] = [
     result: "One random token from the list",
   },
   {
+    name: "NULLABLE_RANDOM_INT",
+    args: "n1 n2 …",
+    result: "One listed integer, or null (equal chance)",
+  },
+  {
+    name: "NULLABLE_RANDOM_FLOAT",
+    args: "f1 f2 …",
+    result: "One listed float, or null (equal chance)",
+  },
+  {
+    name: "NULLABLE_RANDOM_BOOL",
+    args: "—",
+    result: "true, false, or null (equal chance)",
+  },
+  {
+    name: "NULLABLE_RANDOM_STRING",
+    args: "Word1 Word2 …",
+    result: "One listed token, or null (equal chance)",
+  },
+  {
     name: "SEQUENCE_INT",
     args: "n1 n2 …",
     result: "Round-robin through listed integers (1 → 2 → 3 → 1 …)",
@@ -228,6 +269,16 @@ export const actionDocs: ActionDef[] = [
     result: "n words of classic lorem ipsum (cycles if n is longer than the pool)",
   },
   {
+    name: "BASE64",
+    args: "png | jpg",
+    result: "Fake image bytes (magic header + random) as base64; jpeg aliases jpg",
+  },
+  {
+    name: "NULLABLE_BASE64",
+    args: "png | jpg",
+    result: "Same as BASE64, or null (50/50)",
+  },
+  {
     name: "TIMESTAMP_MS",
     args: "—",
     result: "Unix time in milliseconds",
@@ -236,6 +287,11 @@ export const actionDocs: ActionDef[] = [
     name: "TIMESTAMP_ISO",
     args: "—",
     result: "UTC timestamp YYYY-MM-DDTHH:MM:SSZ",
+  },
+  {
+    name: "ID",
+    args: "—",
+    result: "Random 8-digit integer (10000000…99999999)",
   },
   {
     name: "UUID",
