@@ -157,6 +157,17 @@ const ws = new WebSocket("ws://127.0.0.1:8081/ws");
 ws.onmessage = (e) => console.log(JSON.parse(e.data));
 ```
 
+## Examples UI
+
+Vite + React playground with live REST / WebSocket examples (code + Run result):
+
+```bash
+zig build run                        # terminal 1 — mock on 8080/8081
+cd web && npm install && npm run dev # terminal 2 — http://127.0.0.1:5173
+```
+
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173). CORS is enabled on the REST mock; the page calls `http://127.0.0.1:8080` and `ws://127.0.0.1:8081/ws` directly.
+
 ## Layout
 
 ```
@@ -166,4 +177,5 @@ src/main.zig       # CLI --rest / --ws
 src/config.zig     # config parsing
 src/actions.zig    # !{ACTION}
 src/server.zig     # REST + WS listeners
+web/               # Vite + React examples playground
 ```

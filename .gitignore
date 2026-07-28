@@ -24,3 +24,7 @@ Desktop.ini
 *.log
 *.tmp
 *.temp
+
+# Examples UI (Vite)
+web/node_modules/
+web/dist/
