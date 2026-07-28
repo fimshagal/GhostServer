@@ -21,10 +21,10 @@ export default function App() {
       </header>
 
       <main id="examples" className="examples">
+        <WsExample />
         {restExamples.map((example) => (
           <RestExample key={example.id} example={example} />
         ))}
-        <WsExample />
         <ActionsReference />
       </main>
 

@@ -325,6 +325,18 @@ code {
   border-top: none;
 }
 
+.code--ws-latest {
+  background: var(--teal-soft);
+}
+
+.ws-ticks {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--teal-deep);
+  margin-left: 0.25rem;
+}
+
 .status {
   margin: 0.5rem 1rem 0;
 }

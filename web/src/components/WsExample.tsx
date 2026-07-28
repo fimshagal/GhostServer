@@ -15,6 +15,7 @@ export function WsExample() {
   const [error, setError] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [flash, setFlash] = useState(false);
+  const [tickCount, setTickCount] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const idRef = useRef(0);
 
@@ -25,7 +26,7 @@ export function WsExample() {
     };
   }, []);
 
-  function connect() {
+  function start() {
     if (wsRef.current) return;
     setConnecting(true);
     setError(null);
@@ -49,6 +50,7 @@ export function WsExample() {
       idRef.current += 1;
       const msg: Msg = { id: idRef.current, raw, pretty };
       setMessages((prev) => [msg, ...prev].slice(0, MAX_MESSAGES));
+      setTickCount((n) => n + 1);
       setFlash(true);
       window.setTimeout(() => setFlash(false), 350);
     };
@@ -65,7 +67,7 @@ export function WsExample() {
     };
   }
 
-  function disconnect() {
+  function stop() {
     wsRef.current?.close();
     wsRef.current = null;
     setConnected(false);
@@ -78,10 +80,10 @@ export function WsExample() {
           <span className="method method--ws">WS</span>
           <code>{WS_URL}</code>
         </p>
-        <h2 className="example__title">WebSocket stream</h2>
+        <h2 className="example__title">WebSocket live stream</h2>
         <p className="example__desc">
-          From config-ws.json — pushes JSON every interval_ms with TIMESTAMP and
-          RANDOM actions.
+          Keeps updating every <code>interval_ms</code> after you start. Press{" "}
+          <strong>Stop</strong> anytime to close the socket.
         </p>
       </header>
 
@@ -96,23 +98,26 @@ export function WsExample() {
         <div className={`panel panel--result${flash ? " panel--flash" : ""}`}>
           <div className="panel__bar">
             <span className="panel__label">
-              Live
+              {connected ? "Streaming" : "Live"}
               {connected ? (
                 <span className="live-dot" aria-label="connected" />
               ) : null}
+              {tickCount > 0 ? (
+                <span className="ws-ticks">{tickCount} msg</span>
+              ) : null}
             </span>
             {connected ? (
-              <button type="button" className="btn btn--ghost" onClick={disconnect}>
-                Disconnect
+              <button type="button" className="btn btn--ghost" onClick={stop}>
+                Stop
               </button>
             ) : (
               <button
                 type="button"
                 className="btn"
-                onClick={connect}
+                onClick={start}
                 disabled={connecting}
               >
-                {connecting ? "Connecting…" : "Connect"}
+                {connecting ? "Starting…" : "Start stream"}
               </button>
             )}
           </div>
@@ -126,13 +131,16 @@ export function WsExample() {
               <code>
                 {connected
                   ? "Waiting for messages…"
-                  : "Press Connect to open the WebSocket"}
+                  : "Press Start stream — messages arrive every ~1s until Stop"}
               </code>
             </pre>
           ) : (
             <div className="ws-log">
-              {messages.map((m) => (
-                <pre key={m.id} className="code code--ws">
+              {messages.map((m, i) => (
+                <pre
+                  key={m.id}
+                  className={`code code--ws${i === 0 ? " code--ws-latest" : ""}`}
+                >
                   <code>{m.pretty}</code>
                 </pre>
               ))}
