@@ -106,6 +106,7 @@ A string value that starts with `!{ACTION_NAME}` is evaluated on **every** REST 
 | `SEQUENCE_FLOAT` | `f1 f2 ...` | round-robin through listed floats |
 | `SEQUENCE_BOOL` | `b1 b2 ...` | round-robin through listed bools (`true`/`false`) |
 | `SEQUENCE_STRING` | `Word1 Word2 ...` | round-robin through listed tokens |
+| `LOREM` | `n` | `n` words of lorem ipsum text |
 | `TIMESTAMP_MS` | — | unix time in milliseconds |
 | `TIMESTAMP_ISO` | — | `YYYY-MM-DDTHH:MM:SSZ` |
 | `UUID` | — | random UUID v4 string |

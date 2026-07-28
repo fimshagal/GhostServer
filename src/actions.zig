@@ -71,6 +71,7 @@ pub const builtins = [_]Action{
     .{ .name = "SEQUENCE_FLOAT", .run = sequenceFloat },
     .{ .name = "SEQUENCE_BOOL", .run = sequenceBool },
     .{ .name = "SEQUENCE_STRING", .run = sequenceString },
+    .{ .name = "LOREM", .run = lorem },
     .{ .name = "TIMESTAMP_MS", .run = timestampMs },
     .{ .name = "TIMESTAMP_ISO", .run = timestampIso },
     .{ .name = "UUID", .run = uuid },
@@ -351,6 +352,44 @@ fn sequenceString(ctx: Context, args: []const u8) !json.Value {
     return .{ .string = options.items[index] };
 }
 
+/// Classic lorem ipsum word pool for LOREM.
+const lorem_words = [_][]const u8{
+    "Lorem",       "ipsum",       "dolor",       "sit",         "amet",
+    "consectetur", "adipiscing",  "elit",        "sed",         "do",
+    "eiusmod",     "tempor",      "incididunt",  "ut",          "labore",
+    "et",          "dolore",      "magna",       "aliqua",      "Ut",
+    "enim",        "ad",          "minim",       "veniam",      "quis",
+    "nostrud",     "exercitation","ullamco",     "laboris",     "nisi",
+    "ut",          "aliquip",     "ex",          "ea",          "commodo",
+    "consequat",   "Duis",        "aute",        "irure",       "dolor",
+    "in",          "reprehenderit","in",         "voluptate",   "velit",
+    "esse",        "cillum",      "dolore",      "eu",          "fugiat",
+    "nulla",       "pariatur",    "Excepteur",   "sint",        "occaecat",
+    "cupidatat",   "non",         "proident",    "sunt",        "in",
+    "culpa",       "qui",         "officia",     "deserunt",    "mollit",
+    "anim",        "id",          "est",         "laborum",
+};
+
+fn lorem(ctx: Context, args: []const u8) !json.Value {
+    var it = std.mem.tokenizeAny(u8, args, &std.ascii.whitespace);
+    const count_s = it.next() orelse return error.InvalidActionArgs;
+    if (it.next() != null) return error.InvalidActionArgs;
+
+    const count = try std.fmt.parseInt(usize, count_s, 10);
+    if (count == 0) return error.InvalidActionArgs;
+
+    var out: std.ArrayList(u8) = .empty;
+    errdefer out.deinit(ctx.allocator);
+
+    var i: usize = 0;
+    while (i < count) : (i += 1) {
+        if (i > 0) try out.append(ctx.allocator, ' ');
+        try out.appendSlice(ctx.allocator, lorem_words[i % lorem_words.len]);
+    }
+
+    return .{ .string = try out.toOwnedSlice(ctx.allocator) };
+}
+
 fn timestampMs(ctx: Context, args: []const u8) !json.Value {
     try requireNoArgs(args);
     const ts = std.Io.Timestamp.now(ctx.io, .real);
@@ -619,4 +658,29 @@ test "sequence string float bool cycle" {
     try std.testing.expectEqual(true, (try sequenceBool(ctx, "true false")).bool);
     try std.testing.expectEqual(false, (try sequenceBool(ctx, "true false")).bool);
     try std.testing.expectEqual(true, (try sequenceBool(ctx, "true false")).bool);
+}
+
+test "lorem returns requested word count" {
+    var prng = std.Random.DefaultPrng.init(1);
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    var sequences = SequenceState.init(std.testing.allocator);
+    defer sequences.deinit();
+    const ctx: Context = .{
+        .allocator = arena.allocator(),
+        .random = prng.random(),
+        .io = std.testing.io,
+        .sequences = &sequences,
+    };
+
+    const value = try lorem(ctx, "5");
+    try std.testing.expect(value == .string);
+    try std.testing.expectEqualStrings("Lorem ipsum dolor sit amet", value.string);
+
+    const longer = try lorem(ctx, "25");
+    try std.testing.expect(longer == .string);
+    var words: usize = 0;
+    var it = std.mem.tokenizeAny(u8, longer.string, &std.ascii.whitespace);
+    while (it.next()) |_| words += 1;
+    try std.testing.expectEqual(@as(usize, 25), words);
 }

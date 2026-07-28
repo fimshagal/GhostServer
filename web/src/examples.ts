@@ -63,6 +63,20 @@ export const restExamples: RestExampleDef[] = [
 }`,
   },
   {
+    id: "lorem",
+    title: "Lorem text",
+    description: "LOREM — n words of classic lorem ipsum.",
+    method: "GET",
+    path: "/api/lorem",
+    config: `{
+  "method": "GET",
+  "path": "/api/lorem",
+  "body": {
+    "text": "!{LOREM} 25"
+  }
+}`,
+  },
+  {
     id: "spin",
     title: "Slot spin",
     description: "UUID + RANDOM_INT_MATRIX (5×3 reels).",
@@ -207,6 +221,11 @@ export const actionDocs: ActionDef[] = [
     name: "SEQUENCE_STRING",
     args: "Word1 Word2 …",
     result: "Round-robin through listed tokens",
+  },
+  {
+    name: "LOREM",
+    args: "n",
+    result: "n words of classic lorem ipsum (cycles if n is longer than the pool)",
   },
   {
     name: "TIMESTAMP_MS",

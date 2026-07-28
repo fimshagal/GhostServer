@@ -62,6 +62,13 @@
       }
     },
     {
+      "method": "GET",
+      "path": "/api/lorem",
+      "body": {
+        "text": "!{LOREM} 25"
+      }
+    },
+    {
       "method": "POST",
       "path": "/api/login",
       "status": 401,
